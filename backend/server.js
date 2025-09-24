@@ -1,3 +1,4 @@
+const geminiService = require('./services/geminiService');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -180,40 +181,83 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('send-message', (data) => {
-    try {
-      console.log('💬 Nova mensagem:', data);
+  // Substitua esta parte do socket.on('send-message'):
+socket.on('send-message', async (data) => {
+  try {
+    console.log('💬 Nova mensagem:', data);
+    
+    // Salvar mensagem do usuário no banco
+    const userMessageQuery = 'INSERT INTO messages (user_id, content, room, message_type) VALUES (?, ?, ?, ?)';
+    db.query(userMessageQuery, [1, data.content, data.room || 'general', 'text'], async (err, userResult) => {
+      if (err) {
+        console.error('❌ Erro ao salvar mensagem do usuário:', err);
+        return;
+      }
       
-      const message = {
-        id: Date.now(),
-        user: data.user || 'Anônimo',
+      // Enviar mensagem do usuário para todos
+      const userMessage = {
+        id: userResult.insertId,
+        user: data.user || 'Usuário',
         content: data.content,
         timestamp: new Date(),
         type: 'text',
         room: data.room || 'general'
       };
-
-      // Salvar no banco de dados
-      const query = 'INSERT INTO messages (user_id, content, room, message_type) VALUES (?, ?, ?, ?)';
-      db.query(query, [1, message.content, message.room, 'text'], (err, result) => {
-        if (err) {
-          console.error('❌ Erro ao salvar mensagem:', err);
-        } else {
-          console.log('✅ Mensagem salva no banco, ID:', result.insertId);
-          
-          // Broadcast para todos na sala
-          io.to(message.room).emit('chat-message', {
-            ...message,
-            id: result.insertId
-          });
-        }
-      });
       
-    } catch (error) {
-      console.error('❌ Erro ao processar mensagem:', error);
-      socket.emit('chat-error', { error: 'Erro ao enviar mensagem' });
-    }
-  });
+      io.to(userMessage.room).emit('chat-message', userMessage);
+      
+      // Obter resposta do Gemini
+      try {
+        const geminiResponse = await geminiService.generateResponse(data.content, socket.id);
+        
+        // Salvar resposta do bot no banco
+        const botMessageQuery = 'INSERT INTO messages (content, room, message_type) VALUES (?, ?, ?)';
+        db.query(botMessageQuery, [geminiResponse.message, data.room || 'general', 'text'], (err, botResult) => {
+          if (err) {
+            console.error('❌ Erro ao salvar resposta do bot:', err);
+            return;
+          }
+          
+          // Enviar resposta do bot
+          const botMessage = {
+            id: botResult.insertId,
+            user: 'HallyuBot',
+            content: geminiResponse.message,
+            timestamp: new Date(),
+            type: 'text',
+            room: data.room || 'general',
+            isFallback: geminiResponse.isFallback
+          };
+          
+          // Enviar com delay para parecer mais natural
+          setTimeout(() => {
+            io.to(botMessage.room).emit('chat-message', botMessage);
+          }, 1000 + Math.random() * 2000); // Delay entre 1-3 segundos
+        });
+        
+      } catch (geminiError) {
+        console.error('❌ Erro no Gemini:', geminiError);
+        
+        // Resposta de fallback
+        const fallbackMessage = {
+          id: Date.now(),
+          user: 'HallyuBot',
+          content: "🎵 Estou com dificuldades técnicas agora! Que tal falarmos sobre seus grupos K-Pop favoritos? 💖",
+          timestamp: new Date(),
+          type: 'text',
+          room: data.room || 'general',
+          isFallback: true
+        };
+        
+        io.to(fallbackMessage.room).emit('chat-message', fallbackMessage);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro geral ao processar mensagem:', error);
+    socket.emit('chat-error', { error: 'Erro ao processar mensagem' });
+  }
+});
 
   // Buscar histórico de mensagens
   socket.on('get-message-history', (data) => {

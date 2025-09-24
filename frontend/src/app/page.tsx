@@ -20,8 +20,7 @@ export default function Home() {
       <header className="bg-black/50 backdrop-blur-md py-4 px-6 sticky top-0 z-50 border-b border-white/10">
         <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="text-3xl">💃</div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold text-[#ff6ea4]">
               HallyuChat
             </h1>
           </div>

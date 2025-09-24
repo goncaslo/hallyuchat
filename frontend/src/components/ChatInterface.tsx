@@ -7,6 +7,7 @@ interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: Date;
+  isLoading?: boolean; // ✅ Propriedade opcional
 }
 
 export default function ChatInterface() {
@@ -19,6 +20,7 @@ export default function ChatInterface() {
     }
   ]);
   const [inputText, setInputText] = useState('');
+  const [isSending, setIsSending] = useState(false); // ✅ Estado para controle de envio
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -29,8 +31,8 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (inputText.trim() === '') return;
+  const handleSendMessage = async () => {
+    if (inputText.trim() === '' || isSending) return;
 
     const userMessage: Message = {
       id: Date.now(),
@@ -41,27 +43,85 @@ export default function ChatInterface() {
 
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
+    setIsSending(true);
 
-    // Simular resposta do bot
-    setTimeout(() => {
-      const botResponses = [
-        `Interessante! Você quer saber mais sobre ${inputText} no mundo do K-pop? 🎵`,
-        `Hmm, ${inputText}... Temos várias notícias sobre isso! Quer que eu busque? 📰`,
-        `Ótimo tópico! Muitos fãs estão discutindo sobre ${inputText} atualmente. 💬`,
-        `Sobre ${inputText}, posso te conectar com outros fãs que compartilham esse interesse! 👥`
-      ];
+    // Mensagem de carregamento
+    const loadingMessages = [
+      "💖 Consultando meus arquivos K-Pop...",
+      "🎵 Procurando a melhor informação para você...",
+      "🇰🇷 대박! Analisando sua pergunta...",
+      "🎤 Checando os últimos comeback...",
+      "💃 Dançando enquanto penso na resposta..."
+    ];
+
+    const loadingMessage: Message = {
+      id: Date.now() + 1,
+      text: loadingMessages[Math.floor(Math.random() * loadingMessages.length)],
+      sender: 'bot',
+      timestamp: new Date(),
+      isLoading: true
+    };
+
+    // Adicione este componente para loading animado
+    const LoadingDots = () => (
+      <div className="flex space-x-1">
+        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+      </div>
+    );
+
+    setMessages(prev => [...prev, loadingMessage]);
+
+    try {
+      // Simulação de resposta do Gemini
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Remover mensagem de carregamento e adicionar resposta
+      setMessages(prev => 
+        prev.filter(msg => msg.id !== loadingMessage.id) // Remove loading
+      );
+
+      const botResponse: Message = {
+        id: Date.now() + 2,
+        text: getGeminiResponse(inputText), // Função simulada
+        sender: 'bot',
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, botResponse]);
+
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
       
-      const randomResponse = botResponses[Math.floor(Math.random() * botResponses.length)];
-      
-      const botMessage: Message = {
-        id: Date.now() + 1,
-        text: randomResponse,
+      // Remover mensagem de carregamento em caso de erro
+      setMessages(prev => 
+        prev.filter(msg => msg.id !== loadingMessage.id)
+      );
+
+      const errorMessage: Message = {
+        id: Date.now() + 3,
+        text: "💔 Opa! Algo deu errado. Vamos tentar novamente?",
         sender: 'bot',
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, botMessage]);
-    }, 1500);
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Função simulada para respostas do Gemini
+  const getGeminiResponse = (userInput: string): string => {
+    const responses = [
+      `🎵 대박! Você perguntou sobre "${userInput}"! Em breve terei respostas inteligentes com Gemini AI! 💃`,
+      `💖 Que pergunta interessante sobre "${userInput}"! Estou ansioso para te ajudar com K-Pop! 🇰🇷`,
+      `🎤 오빠/언니! "${userInput}" é um ótimo tópico! Vamos conversar mais sobre K-Pop! ✨`,
+      `🇰🇷 아싸! "${userInput}"! Quando o Gemini estiver integrado, terei respostas incríveis! 🎵`
+    ];
+    
+    return responses[Math.floor(Math.random() * responses.length)];
   };
 
   return (
@@ -71,12 +131,22 @@ export default function ChatInterface() {
       <div className="h-96 overflow-y-auto mb-4 p-4 bg-black/20 rounded-lg">
         {messages.map((message) => (
           <div key={message.id} className={`flex mb-4 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-xs lg:max-w-md rounded-2xl p-4 ${
-              message.sender === 'user' ? 'bg-pink-600 rounded-br-none' : 'bg-purple-600 rounded-bl-none'
-            }`}>
+            <div className={`max-w-xs lg:max-w-md rounded-2xl p-4 relative ${
+              message.sender === 'user' 
+                ? 'bg-pink-600 rounded-br-none' 
+                : 'bg-purple-600 rounded-bl-none'
+            } ${message.isLoading ? 'opacity-80' : ''}`}>
+              
+              {message.isLoading && (
+                <div className="absolute -top-2 -right-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                </div>
+              )}
+              
               <p className="text-white">{message.text}</p>
               <p className="text-xs text-white/70 mt-1">
                 {message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {message.isLoading && ' ⏳'}
               </p>
             </div>
           </div>
@@ -92,12 +162,21 @@ export default function ChatInterface() {
           onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
           placeholder="Pergunte sobre K-pop, grupos, notícias..."
           className="flex-1 bg-white/90 text-gray-800 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-pink-500"
+          disabled={isSending}
         />
         <button
           onClick={handleSendMessage}
-          className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
+          disabled={isSending}
+          className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Enviar
+          {isSending ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Enviando...
+            </div>
+          ) : (
+            'Enviar'
+          )}
         </button>
       </div>
     </div>
